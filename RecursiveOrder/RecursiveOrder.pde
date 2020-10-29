@@ -343,10 +343,12 @@ void rescaleDepthIfNeeded(){
     if(dimx <= twoN/2 && dimy <= twoN/2 && dimz <= twoN/2){
       depth -= 1;
       twoN = round(pow(2,depth));
+      labels[5].setText("Depth= "+str(depth));
       rescaleDepthIfNeeded();
-    }else if(dimx > twoN*2 && dimy > twoN*2 && dimz > twoN*2){
+    }else if(dimx > twoN || dimy > twoN || dimz > twoN){
       depth += 1;
       twoN = round(pow(2,depth));
+      labels[5].setText("Depth= "+str(depth));
       rescaleDepthIfNeeded();
     }
     
@@ -354,25 +356,16 @@ void rescaleDepthIfNeeded(){
     if(dimx <= twoN/2 && dimy <= twoN/2){
       depth -= 1;
       twoN = round(pow(2,depth));
+      labels[5].setText("Depth= "+str(depth));
       rescaleDepthIfNeeded();
-    }else if(dimx > twoN*2 && dimy > twoN*2){
+    }else if(dimx > twoN || dimy > twoN){
       depth += 1;
       twoN = round(pow(2,depth));
+      labels[5].setText("Depth= "+str(depth));
       rescaleDepthIfNeeded();
     }
   }
   
-  
-  if(dimx <= twoN/2 && dimy <= twoN/2 && dimz <= twoN/2){
-    depth -= 1;
-    twoN = round(pow(2,depth));
-    rescaleDepthIfNeeded();
-  }else if(dimx > twoN*2 && dimy > twoN*2 && dimz > twoN*2){
-    depth -= 1;
-    twoN = round(pow(2,depth));
-    rescaleDepthIfNeeded();
-  }
-  println("depth = "+str(depth));
 }
 
 void buildPoints(){
@@ -478,10 +471,6 @@ int[] get_recursive_order(int type, int dim, int[] griddim){
           rorder = new int[1];
         }
         
-        print("griddim=");
-        println(griddim);
-        println("nnodes = "+str(nnodes));
-        println("fullnnodes = "+str(fullnnodes));
         // Truncate ordering to match griddim size
         subrorder = new int[nnodes];
         subind = 0;
