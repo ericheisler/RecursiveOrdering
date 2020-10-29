@@ -26,9 +26,13 @@ float rotateRate = 0.003;
 Point3[] nodes;
 int nnodes;
 int dimx, dimy, dimz;
-int orderType; // lex=0, mort=2, hilb=1, tile=3
+int orderType; // lex=-1, mort=2, hilb=1, tile=0
 String orderTypeName;
 int[] order;
+
+boolean useElements;
+int elementSize;
+int[][] elements;
 
 int tileSize, depth, twoN;
 
@@ -55,12 +59,16 @@ void setup(){
   dimx = twoN;
   dimy = twoN;
   dimz = twoN;
-  orderType = 0;
+  nnodes = twoN*twoN*twoN;
+  orderType = -1;
   orderTypeName = "Lexicographic";
+  
+  useElements = false;
+  elementSize = 1;
   
   buildPoints();
   
-  buttoncount = 10;
+  buttoncount = 13;
   buttons = new Button[buttoncount];
   buttons[0] = new Button(rightx, 10, rightWidth-10, 30, "Lexicographic");
   buttons[1] = new Button(rightx, 45, rightWidth-10, 30, "Hilbert");
@@ -73,10 +81,14 @@ void setup(){
   buttons[6] = new Button(rightx, 190, 30, 30, "<");
   buttons[7] = new Button(width - 40, 190, 30, 30, ">");
   
-  buttons[8] = new Button(rightx, 225, rightWidth/2 - 5, 30, "2D");
-  buttons[9] = new Button(rightx + rightWidth/2+5, 225, rightWidth/2 - 5, 30, "3D");
+  buttons[8] = new Button(rightx, 225, rightWidth/2 - 10, 30, "2D");
+  buttons[9] = new Button(rightx + rightWidth/2+5, 225, rightWidth/2 - 15, 30, "3D");
   
-  labelcount = 6;
+  buttons[10] = new Button(rightx, 270, rightWidth-10, 30, "Elements");
+  buttons[11] = new Button(rightx, 305, 30, 30, "<");
+  buttons[12] = new Button(width - 40, 305, 30, 30, ">");
+  
+  labelcount = 7;
   labels = new Label[labelcount];
   labels[0] = new Label(10, 10, leftWidth-20, 30, "Grid size");
   labels[1] = new Label(10, 45, 40, 30, "X");
@@ -86,12 +98,13 @@ void setup(){
   labels[1].centerText(true);
   labels[2].centerText(true);
   labels[3].centerText(true);
-  labels[0].showBox(false);
   
   labels[4] = new Label(rightx + 35, 155, rightWidth - 80, 30, "Tile size= "+str(tileSize));
   labels[5] = new Label(rightx + 35, 190, rightWidth - 80, 30, "Depth= "+str(depth));
   labels[4].showBox(true);
   labels[5].showBox(true);
+  
+  labels[6] = new Label(rightx + 35, 305, rightWidth - 80, 30, "el size = "+str(elementSize));
   
   xslider = new Slider(10, 80, 40, height-90, 1, twoN, twoN, str(twoN));
   yslider = new Slider(55, 80, 40, height-90, 1, twoN, twoN, str(twoN));
@@ -126,7 +139,7 @@ void draw(){
     box(cubesize);
     
     // Draw the nodes
-    colorMode(HSB, nnodes);
+    colorMode(HSB, round(nnodes*1.2));
     strokeWeight(8);
     for(int i=0; i<nnodes; i++){
       int ind = order[i];
@@ -151,7 +164,7 @@ void draw(){
     rect(centerx+cpad, cpad, squaresize, squaresize);
     
     // Draw the nodes
-    colorMode(HSB, nnodes);
+    colorMode(HSB, round(nnodes*1.2));
     strokeWeight(8);
     for(int i=0; i<nnodes; i++){
       int ind = order[i];
@@ -199,7 +212,7 @@ void mouseClicked(){
   if(clickedItem >= 0){
     switch(clickedItem){
       case 0: // lex
-        orderType = 0;
+        orderType = -1;
         orderTypeName = "Lexicographic";
         buildPoints();
         break;
@@ -214,6 +227,9 @@ void mouseClicked(){
         buildPoints();
         break;
       case 3: // tile
+        orderType = 0;
+        orderTypeName = "Tiled("+str(tileSize)+")";
+        buildPoints();
         break;
       case 4: // tile down
         tileSize = max(1,tileSize-1);
@@ -243,21 +259,37 @@ void mouseClicked(){
         threeD = true;
         changedN();
         break;
+      case 10: // use elements
+        useElements = !useElements;
+        if(useElements){
+          changedElements();
+        }
+        break;
+      case 11: // elsize down
+        elementSize = max(1,elementSize-1);
+        changedElements();
+        labels[6].setText("el size = "+str(elementSize));
+        break;
+      case 12: // elsize up
+        elementSize = min(elementSize+1,twoN);
+        changedElements();
+        labels[6].setText("el size = "+str(elementSize));
+        break;
         
       case 100:
-        xslider.clickSlide();
+        if(!useElements){xslider.clickSlide();}
         dimx = xslider.getValue();
         rescaleDepthIfNeeded();
         buildPoints();
         break;
       case 101:
-        yslider.clickSlide();
+        if(!useElements){yslider.clickSlide();}
         dimy = yslider.getValue();
         rescaleDepthIfNeeded();
         buildPoints();
         break;
       case 102:
-        zslider.clickSlide();
+        if(!useElements){zslider.clickSlide();}
         dimz = zslider.getValue();
         rescaleDepthIfNeeded();
         buildPoints();
@@ -299,13 +331,15 @@ void mouseDragged(){
     rotatex = mouseX;
     rotatey = mouseY;
   }else if(movingSlider){
-    currentSlider.moveTo(mouseY);
-    if(dimx != xslider.getValue() || dimy != yslider.getValue() ||dimz != zslider.getValue()){
-      dimx = xslider.getValue();
-      dimy = yslider.getValue();
-      dimz = zslider.getValue();
-      rescaleDepthIfNeeded();
-      buildPoints();
+    if(!useElements){
+      currentSlider.moveTo(mouseY);
+      if(dimx != xslider.getValue() || dimy != yslider.getValue() ||dimz != zslider.getValue()){
+        dimx = xslider.getValue();
+        dimy = yslider.getValue();
+        dimz = zslider.getValue();
+        rescaleDepthIfNeeded();
+        buildPoints();
+      }
     }
   }
 }
@@ -317,6 +351,47 @@ void mouseWheel(MouseEvent event){
   }else{
     
   }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Build the grid, etc.
+///////////////////////////////////////////////////////////////////////////////
+int distance(int a, int b){
+  int p1 = 0;
+  int p2 = 0;
+  int set = 0;
+  for(int i=0; i<nnodes; i++){
+    if(order[i] == a){ 
+      p1 = i; 
+      set +=1;
+    }
+    if(order[i] == b){ 
+      p2 = i; 
+      set +=1;
+    }
+    if(set==2){
+      break;
+    }
+  }
+  
+  return abs(p2-p1);
+}
+
+float maxDistance(int[] nod, int np){
+  int minnod = nnodes;
+  int maxnod = 0;
+  int[] inverted = invert_ordering(order, nnodes);
+  
+  for(int i=0; i<np; i++){
+    if(inverted[nod[i]] > maxnod){
+      maxnod = inverted[nod[i]];
+    }
+    if(inverted[nod[i]] < minnod){
+      minnod = inverted[nod[i]];
+    }
+  }
+  
+  return maxnod-minnod;
 }
 
 void changedN(){
@@ -332,6 +407,20 @@ void changedN(){
   xslider.setValue(twoN);
   yslider.setValue(twoN);
   zslider.setValue(twoN);
+}
+
+void changedElements(){
+  if(useElements){
+    dimx = twoN - twoN%elementSize;
+    dimy = dimx;
+    dimz = dimx;
+    
+    xslider.setValue(dimx);
+    yslider.setValue(dimy);
+    zslider.setValue(dimz);
+    
+    buildElements();
+  }
 }
 
 void rescaleDepthIfNeeded(){
@@ -395,6 +484,16 @@ void buildPoints(){
       griddim[1] = dimy;
       griddim[2] = dimz;
       order = get_recursive_order(orderType, 3, griddim);
+    }else if(orderType == 0){
+      int[] griddim = new int[3];
+      griddim[0] = dimx;
+      griddim[1] = dimy;
+      griddim[2] = dimz;
+      int[] tiledim = new int[3];
+      tiledim[0] = tileSize;
+      tiledim[1] = tileSize;
+      tiledim[2] = tileSize;
+      order = tiled_order_3d(griddim, tiledim, false);
     }
     
   }else{ //2D
@@ -419,9 +518,76 @@ void buildPoints(){
       griddim[0] = dimx;
       griddim[1] = dimy;
       order = get_recursive_order(orderType, 2, griddim);
+    }else if(orderType == 0){
+      int[] griddim = new int[2];
+      griddim[0] = dimx;
+      griddim[1] = dimy;
+      int[] tiledim = new int[2];
+      tiledim[0] = tileSize;
+      tiledim[1] = tileSize;
+      order = tiled_order_2d(griddim, tiledim, false);
     }
   }
   
+}
+
+void buildElements(){
+  int nel1d = round(dimx/elementSize);
+  int nel;
+  int np = elementSize;
+  if(threeD){
+    nel = nel1d*nel1d*nel1d;
+    np = np*np*np;
+  }else{
+    nel = nel1d*nel1d;
+    np = np*np;
+  }
+  elements = new int[nel][np];
+  
+  int[] refel = new int[np];
+  int rind, gind, lowerleft, elind;
+  if(threeD){
+    for(int k=0; k<elementSize; k++){
+      for(int j=0; j<elementSize; j++){
+        for(int i=0; i<elementSize; i++){
+          rind = i + elementSize*(j + elementSize*k);
+          gind = i + dimx*(j + dimy*k);
+          refel[rind] = gind;
+        }
+      }
+    }
+    
+    for(int k=0; k<nel1d; k++){
+      for(int j=0; j<nel1d; j++){
+        for(int i=0; i<nel1d; i++){
+          lowerleft = i*(elementSize-1)+dimx*(j*(elementSize-1)+dimy*k*(elementSize-1));
+          elind = i + nel1d*(j + nel1d*k);
+          for(int ni=0; ni<np; ni++){
+            elements[elind][ni] = lowerleft + refel[ni];
+          }
+        }
+      }
+    }
+    
+  }else{
+    for(int j=0; j<elementSize; j++){
+      for(int i=0; i<elementSize; i++){
+        rind = i + elementSize*j;
+        gind = i + dimx*j;
+        refel[rind] = gind;
+      }
+    }
+    
+    for(int j=0; j<nel1d; j++){
+      for(int i=0; i<nel1d; i++){
+        lowerleft = i*(elementSize-1)+dimx*(j*(elementSize-1));
+        elind = i + nel1d*(j);
+        for(int ni=0; ni<np; ni++){
+          elements[elind][ni] = lowerleft + refel[ni];
+        }
+      }
+    }
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -749,82 +915,7 @@ int[] build_ordering_2d(RecursiveOrdering ord, int N, boolean invert){
     }
     
     return result;
-    //nnodes = (2^N)^2;
-    //lexorder = zeros(Int,nnodes,2);
-    //twoN = 2^N;
-    //for j=1:twoN
-    //    for i=1:twoN
-    //        ni = i + twoN*(j-1);
-    //        lexorder[ni,1] = i;
-    //        lexorder[ni,2] = j;
-    //    }
-    //}
     
-    //bbox = zeros(4);
-    //bbox[1] = 1;
-    //bbox[3] = 1;
-    //bbox[2] = twoN;
-    //bbox[4] = twoN;
-    
-    //center = [(bbox[1]+bbox[2])/2, (bbox[3]+bbox[4])/2];
-    //tmpbbox = zeros(4);
-    //tmpcenter = zeros(2);
-    
-    //result = zeros(Int64, nnodes);
-    //for ni=1:nnodes
-    //    vertex = lexorder[ni,:];
-    //    for bi=1:4
-    //        tmpbbox[bi] = bbox[bi];
-    //    }
-    //    tmpcenter[1] = center[1];
-    //    tmpcenter[2] = center[2];
-        
-    //    // Find the index for this node
-    //    index = Int64(0);
-    //    state = 1;
-    //    for i=1:N
-    //        stupid = index;
-    //        stupid = state;
-    //        index = index<<2;
-    //        // Which quadrant is it in?
-    //        quad = 0;
-    //        if vertex[1] > tmpcenter[1]
-    //            quad = quad+1;
-    //        }
-    //        if vertex[2] > tmpcenter[2]
-    //            quad = quad+2;
-    //        }
-    //        quad += 1; // 1-based index
-    //        //println("ni="*string(ni)*" level="*string(i)*" quad="*string(quad));
-            
-    //        // Add this quad's ordering position to index 
-    //        index += ord.orders[state][quad] - 1;
-            
-    //        // Update the state to that quad's state according to rule for this one.
-    //        state = ord.rules[state][quad];
-            
-    //        // Shrink the box to one quad
-    //        for j=1:2
-    //            if vertex[j] > tmpcenter[j]
-    //                tmpbbox[2*j-1] = tmpcenter[j];
-    //            else
-    //                tmpbbox[2*j] = tmpcenter[j];
-    //            }
-    //        }
-    //        tmpcenter = [(tmpbbox[1]+tmpbbox[2])/2, (tmpbbox[3]+tmpbbox[4])/2];
-    //    }
-        
-    //    // add one for 1-based index
-    //    index += 1;
-    //    //println("index for ni="*string(ni)*" is "*string(index));
-    //    if invert
-    //        result[ni] = index;
-    //    else
-    //        result[index] = ni;
-    //    }
-    //}
-    
-    //return result;
 }
 
 // Build the ordering for a (2^N)^D grid
@@ -955,6 +1046,113 @@ class RecursiveOrdering{
       rules = rule;
       orders = order;
     }
+}
+
+/*
+// Builds a tiled ordering of a 2D or 3D grid
+// Tiles are tiledim in size (except edge tiles which could be smaller)
+// Grid has griddim size
+// Returns the global order in which objects shall be indexed.
+// example: 2D, griddim=(4,4), tiledim=(3,3)
+//     13  14  15  16
+//      7   8   9  12
+//      4   5   6  11
+//      1   2   3  10
+// Invert=true will give  [1, 2, 3, 5, 6, 7 ...]   (encode?)
+// Invert=false will give [1, 2, 3, 10, 4, 5, ...] (decode?)
+*/
+
+int[] tiled_order_2d(int[] griddim, int[] tiledim, boolean invert){
+    // griddim and tiledim are tuples of grid dimensions
+    int gridx = griddim[0];
+    int gridy = griddim[1];
+    int tilex = tiledim[0];
+    int tiley = tiledim[1];
+    
+    int nnodes = gridx*gridy;
+    int[] tiled = new int[nnodes]; // The ordering
+    
+    // Count full tiles and renaining edge nodes.
+    int fullx = round(floor(gridx / tilex));
+    int partialx = gridx - fullx*tilex;
+    int fully = round(floor(gridy / tiley));
+    int partialy = gridy - fully*tiley;
+    
+    int tind = -1;
+    int ytill, xtill, gind;
+    for(int j=0; j<=fully; j++){
+        ytill = j<fully ? tiley : partialy;
+        for(int i=0; i<=fullx; i++){
+            xtill = i<fullx ? tilex : partialx;
+            
+            // Add that tile's nodes one at a time
+            for(int tj=0; tj<ytill; tj++){
+                for(int ti=0; ti<xtill; ti++){
+                    gind = ti + i*tilex + gridx*(tj + j*tiley);
+                    tind = tind + 1;
+                    if(invert){
+                        tiled[gind] = tind;
+                    }else{
+                        tiled[tind] = gind;
+                    }
+                }
+            }
+            
+        }
+    }
+    
+    return tiled;
+}
+
+int[] tiled_order_3d(int[] griddim, int[] tiledim, boolean invert){
+    // griddim and tiledim are tuples of grid dimensions
+    int gridx = griddim[0];
+    int gridy = griddim[1];
+    int gridz = griddim[2];
+    int tilex = tiledim[0];
+    int tiley = tiledim[1];
+    int tilez = tiledim[2];
+    
+    int nnodes = gridx*gridy*gridz;
+    int[] tiled = new int[nnodes]; // The ordering
+    
+    // Count full tiles and renaining edge nodes.
+    int fullx = round(floor(gridx / tilex));
+    int partialx = gridx - fullx*tilex;
+    int fully = round(floor(gridy / tiley));
+    int partialy = gridy - fully*tiley;
+    int fullz = round(floor(gridz / tilez));
+    int partialz = gridz - fullz*tilez;
+    
+    int tind = -1;
+    int tx, ty, tz, xtill, ytill, ztill, gind;
+    int Ntiles = (fullx+1)*(fully+1)*(fullz+1);
+    for(int i=0; i<Ntiles; i++){
+        // Get the tile coordinates in (x,y,z)
+        tx = round(i%(fullx+1));
+        ty = round(floor(i%((fullx+1)*(fully+1))/(fullx+1)));
+        tz = round(floor(i/((fullx+1)*(fully+1))));
+        xtill = (tx<fullx) ? tilex : partialx;
+        ytill = (ty<fully) ? tiley : partialy;
+        ztill = (tz<fullz) ? tilez : partialz;
+        
+        // Add that tile's nodes one at a time
+        for(int tk=0; tk<ztill; tk++){
+            for(int tj=0; tj<ytill; tj++){
+                for(int ti=0; ti<xtill; ti++){
+                    gind = ti + tx*tilex + gridx*((tj + ty*tiley) + gridy*(tk + tz*tilez));
+                    tind = tind + 1;
+                    if(invert){
+                        tiled[gind] = tind;
+                    }else{
+                        tiled[tind] = gind;
+                    }
+                }
+            }
+        }
+    }
+    
+    return tiled;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
