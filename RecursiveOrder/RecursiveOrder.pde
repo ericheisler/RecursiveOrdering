@@ -29,10 +29,22 @@ int dimx, dimy, dimz;
 int orderType; // lex=-1, mort=2, hilb=1, tile=0
 String orderTypeName;
 int[] order;
+int[] invorder;
 
 boolean useElements;
 int elementSize;
+int elementBoxSize;
+int nel, nel1d;
 int[][] elements;
+int[][] vertices;
+
+int nodesPerLine;
+int nodeSize;
+int cachelines;
+int totalLines;
+float aveMaxDist;
+int lineBins[];
+int misses;
 
 int tileSize, depth, twoN;
 
@@ -64,11 +76,16 @@ void setup(){
   orderTypeName = "Lexicographic";
   
   useElements = false;
-  elementSize = 1;
+  elementSize = 2;
+  
+  nodesPerLine = 16;
+  cachelines = 16;
+  aveMaxDist = 0;
+  misses = 0;
   
   buildPoints();
   
-  buttoncount = 13;
+  buttoncount = 17;
   buttons = new Button[buttoncount];
   buttons[0] = new Button(rightx, 10, rightWidth-10, 30, "Lexicographic");
   buttons[1] = new Button(rightx, 45, rightWidth-10, 30, "Hilbert");
@@ -84,11 +101,17 @@ void setup(){
   buttons[8] = new Button(rightx, 225, rightWidth/2 - 10, 30, "2D");
   buttons[9] = new Button(rightx + rightWidth/2+5, 225, rightWidth/2 - 15, 30, "3D");
   
-  buttons[10] = new Button(rightx, 270, rightWidth-10, 30, "Elements");
+  buttons[10] = new Button(rightx, 270, rightWidth-10, 30, "make elements");
   buttons[11] = new Button(rightx, 305, 30, 30, "<");
   buttons[12] = new Button(width - 40, 305, 30, 30, ">");
   
-  labelcount = 7;
+  buttons[13] = new Button(rightx, 350, 30, 30, "<");
+  buttons[14] = new Button(width - 40, 350, 30, 30, ">");
+  
+  buttons[15] = new Button(rightx, 385, 30, 30, "<");
+  buttons[16] = new Button(width - 40, 385, 30, 30, ">");
+  
+  labelcount = 11;
   labels = new Label[labelcount];
   labels[0] = new Label(10, 10, leftWidth-20, 30, "Grid size");
   labels[1] = new Label(10, 45, 40, 30, "X");
@@ -104,7 +127,12 @@ void setup(){
   labels[4].showBox(true);
   labels[5].showBox(true);
   
-  labels[6] = new Label(rightx + 35, 305, rightWidth - 80, 30, "el size = "+str(elementSize));
+  labels[6] = new Label(rightx + 35, 305, rightWidth - 80, 30, "el order = "+str(elementSize-1));
+  
+  labels[7] = new Label(rightx + 35, 350, rightWidth - 80, 30, "nodes/$line= "+str(nodesPerLine));
+  labels[8] = new Label(rightx + 35, 385, rightWidth - 80, 30, "cache lines= "+str(cachelines));
+  labels[9] = new Label(rightx, 430, rightWidth, 30, "aveMaxDist= "+str(aveMaxDist)+"\n");
+  labels[10] = new Label(rightx, 470, rightWidth, 40, "");
   
   xslider = new Slider(10, 80, 40, height-90, 1, twoN, twoN, str(twoN));
   yslider = new Slider(55, 80, 40, height-90, 1, twoN, twoN, str(twoN));
@@ -138,6 +166,18 @@ void draw(){
     rotateY(cubeAngley);
     box(cubesize);
     
+    
+    // Draw the elements
+    if(useElements){
+      stroke(100);
+      strokeWeight(3);
+      
+      for(int ei=0; ei<nel; ei++){
+        drawBox(ei);
+      }
+    }
+    
+    
     // Draw the nodes
     colorMode(HSB, round(nnodes*1.2));
     strokeWeight(8);
@@ -163,6 +203,16 @@ void draw(){
     stroke(150);
     rect(centerx+cpad, cpad, squaresize, squaresize);
     
+    // Draw the elements
+    if(useElements){
+      stroke(100);
+      strokeWeight(3);
+      
+      for(int ei=0; ei<nel; ei++){
+        drawSquare(ei);
+      }
+    }
+    
     // Draw the nodes
     colorMode(HSB, round(nnodes*1.2));
     strokeWeight(8);
@@ -186,6 +236,39 @@ void draw(){
   colorMode(RGB,255);
 }
 
+void drawBox(int ei){
+  Point3 p0 = nodes[vertices[ei][0]];
+  Point3 p1 = nodes[vertices[ei][1]];
+  Point3 p2 = nodes[vertices[ei][2]];
+  Point3 p3 = nodes[vertices[ei][3]];
+  Point3 p4 = nodes[vertices[ei][4]];
+  Point3 p5 = nodes[vertices[ei][5]];
+  Point3 p6 = nodes[vertices[ei][6]];
+  Point3 p7 = nodes[vertices[ei][7]];
+  line(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z);
+  line(p0.x, p0.y, p0.z, p2.x, p2.y, p2.z);
+  line(p0.x, p0.y, p0.z, p4.x, p4.y, p4.z);
+  line(p1.x, p1.y, p1.z, p3.x, p3.y, p3.z);
+  line(p1.x, p1.y, p1.z, p5.x, p5.y, p5.z);
+  line(p2.x, p2.y, p2.z, p3.x, p3.y, p3.z);
+  line(p2.x, p2.y, p2.z, p6.x, p6.y, p6.z);
+  line(p3.x, p3.y, p3.z, p7.x, p7.y, p7.z);
+  line(p4.x, p4.y, p4.z, p5.x, p5.y, p5.z);
+  line(p4.x, p4.y, p4.z, p6.x, p6.y, p6.z);
+  line(p7.x, p7.y, p7.z, p5.x, p5.y, p5.z);
+  line(p7.x, p7.y, p7.z, p6.x, p6.y, p6.z);
+}
+
+void drawSquare(int ei){
+  Point3 p0 = nodes[vertices[ei][0]];
+  Point3 p1 = nodes[vertices[ei][1]];
+  Point3 p2 = nodes[vertices[ei][2]];
+  Point3 p3 = nodes[vertices[ei][3]];
+  line(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z);
+  line(p0.x, p0.y, p0.z, p2.x, p2.y, p2.z);
+  line(p3.x, p3.y, p3.z, p1.x, p1.y, p1.z);
+  line(p3.x, p3.y, p3.z, p2.x, p2.y, p2.z);
+}
 
 void keyPressed(){
   //if(key == 'a'){
@@ -215,30 +298,48 @@ void mouseClicked(){
         orderType = -1;
         orderTypeName = "Lexicographic";
         buildPoints();
+        if(useElements){
+          computeCacheStats();
+        }
         break;
       case 2: // mort
         orderType = 2;
         orderTypeName = "Morton";
         buildPoints();
+        if(useElements){
+          computeCacheStats();
+        }
         break;
       case 1: // hilb
         orderType = 1;
         orderTypeName = "Hilbert";
         buildPoints();
+        if(useElements){
+          computeCacheStats();
+        }
         break;
       case 3: // tile
         orderType = 0;
         orderTypeName = "Tiled("+str(tileSize)+")";
         buildPoints();
+        if(useElements){
+          computeCacheStats();
+        }
         break;
       case 4: // tile down
         tileSize = max(1,tileSize-1);
         buildPoints();
+        if(useElements){
+          computeCacheStats();
+        }
         labels[4].setText("Tile size= "+str(tileSize));
         break;
       case 5: // tile up
         tileSize = min(tileSize+1, twoN);
         buildPoints();
+        if(useElements){
+          computeCacheStats();
+        }
         labels[4].setText("Tile size= "+str(tileSize));
         break;
       case 6: // depth down
@@ -262,18 +363,35 @@ void mouseClicked(){
       case 10: // use elements
         useElements = !useElements;
         if(useElements){
+          buttons[10].setText("remove elements");
           changedElements();
+        }else{
+          buttons[10].setText("make elements");
         }
         break;
       case 11: // elsize down
-        elementSize = max(1,elementSize-1);
+        elementSize = max(2,elementSize-1);
         changedElements();
-        labels[6].setText("el size = "+str(elementSize));
         break;
       case 12: // elsize up
         elementSize = min(elementSize+1,twoN);
         changedElements();
-        labels[6].setText("el size = "+str(elementSize));
+        break;
+      case 13: // nodes/line down
+        nodesPerLine = max(1,nodesPerLine-1);
+        changedCache();
+        break;
+      case 14: // nodes/line up
+        nodesPerLine = min(nodesPerLine+1,nnodes);
+        changedCache();
+        break;
+      case 15: // cachelines down
+        cachelines = max(1,cachelines-1);
+        changedCache();
+        break;
+      case 16: // cachelines up
+        cachelines = min(cachelines+1,nnodes);
+        changedCache();
         break;
         
       case 100:
@@ -399,19 +517,28 @@ void changedN(){
   dimx = twoN;
   dimy = twoN;
   dimz = twoN;
-  buildPoints();
   
-  xslider.setRange(1,twoN);
-  yslider.setRange(1,twoN);
-  zslider.setRange(1,twoN);
-  xslider.setValue(twoN);
-  yslider.setValue(twoN);
-  zslider.setValue(twoN);
+  if(useElements){
+    changedElements();
+    
+  }else{
+    buildPoints();
+    
+    xslider.setRange(1,twoN);
+    yslider.setRange(1,twoN);
+    zslider.setRange(1,twoN);
+    xslider.setValue(twoN);
+    yslider.setValue(twoN);
+    zslider.setValue(twoN);
+  }
+  
+  
 }
 
 void changedElements(){
+  labels[6].setText("el order = "+str(elementSize-1));
   if(useElements){
-    dimx = twoN - twoN%elementSize;
+    dimx = twoN - (twoN-1)%(elementSize-1);
     dimy = dimx;
     dimz = dimx;
     
@@ -419,7 +546,19 @@ void changedElements(){
     yslider.setValue(dimy);
     zslider.setValue(dimz);
     
+    buildPoints();
     buildElements();
+    computeCacheStats();
+  }
+}
+
+void changedCache(){
+  
+  labels[7].setText("nodes/$line= "+str(nodesPerLine));
+  labels[8].setText("cache lines= "+str(cachelines));
+  
+  if(useElements){
+    computeCacheStats();
   }
 }
 
@@ -528,21 +667,29 @@ void buildPoints(){
       order = tiled_order_2d(griddim, tiledim, false);
     }
   }
-  
+  invorder = invert_ordering(order, nnodes);
 }
 
 void buildElements(){
-  int nel1d = round(dimx/elementSize);
-  int nel;
+  nel1d = round((dimx-1)/(elementSize-1));
+  if(nel1d<1){
+    nel1d=1;
+  }
   int np = elementSize;
+  int nv;
   if(threeD){
     nel = nel1d*nel1d*nel1d;
     np = np*np*np;
+    nv=8;
+    elementBoxSize = cubesize/nel1d;
   }else{
     nel = nel1d*nel1d;
     np = np*np;
+    nv=4;
+    elementBoxSize = squaresize/nel1d;
   }
   elements = new int[nel][np];
+  vertices = new int[nel][nv];
   
   int[] refel = new int[np];
   int rind, gind, lowerleft, elind;
@@ -565,6 +712,14 @@ void buildElements(){
           for(int ni=0; ni<np; ni++){
             elements[elind][ni] = lowerleft + refel[ni];
           }
+          vertices[elind][0] = lowerleft;
+          vertices[elind][1] = lowerleft + refel[elementSize-1];
+          vertices[elind][2] = lowerleft + refel[elementSize*(elementSize-1)];
+          vertices[elind][3] = lowerleft + refel[elementSize*elementSize-1];
+          vertices[elind][4] = lowerleft + refel[elementSize*elementSize*(elementSize-1)];
+          vertices[elind][5] = lowerleft + refel[elementSize*elementSize*(elementSize-1) + elementSize-1];
+          vertices[elind][6] = lowerleft + refel[elementSize*elementSize*(elementSize-1) + elementSize*(elementSize-1)];
+          vertices[elind][7] = lowerleft + refel[elementSize*elementSize*elementSize-1];
         }
       }
     }
@@ -585,9 +740,89 @@ void buildElements(){
         for(int ni=0; ni<np; ni++){
           elements[elind][ni] = lowerleft + refel[ni];
         }
+        vertices[elind][0] = lowerleft;
+        vertices[elind][1] = lowerleft + refel[elementSize-1];
+        vertices[elind][2] = lowerleft + refel[elementSize*(elementSize-1)];
+        vertices[elind][3] = lowerleft + refel[elementSize*elementSize-1];
       }
     }
   }
+}
+
+void computeCacheStats(){
+  // For each element find max distance and number of lines needed
+  int maxDist = 0;
+  int lines = 0;
+  totalLines = nnodes/nodesPerLine;
+  if(nnodes%nodesPerLine > 0){
+    totalLines += 1;
+  }
+  
+  // Record these stats
+  aveMaxDist = 0.0;
+  
+  int np;
+  int coveredlines[]; // list of cache lines used by this element
+  if(threeD){
+    np = elementSize*elementSize*elementSize;
+  }else{
+    np = elementSize*elementSize;
+  }
+  coveredlines = new int[np];
+  lineBins = new int[np];
+  
+  // Loop ever elements
+  for(int ei=0; ei<nel; ei++){
+    maxDist = 0;
+    lines = 0;
+    
+    // Loop over nodes
+    int ind, lin;
+    boolean already;
+    for(int ni=0; ni<np; ni++){
+      already = false;
+      ind = invorder[elements[ei][ni]];
+      lin = ind/nodesPerLine;
+      coveredlines[ni] = lin;
+      // Check if line is already covered
+      for(int li=0; li<ni; li++){
+        if(coveredlines[li] == lin){
+          already = true;
+          break;
+        }
+      }
+      if(!already){
+        lines += 1;
+      }
+      
+      // Find max distance between nodes
+      for(int nj=ni+1; nj<np; nj++){
+        maxDist = max(abs(ind-invorder[elements[ei][nj]]), maxDist);
+      }
+    }
+    
+    // add to totals
+    lineBins[lines-1] += 1;
+    aveMaxDist += maxDist;
+  }
+  
+  // averages
+  aveMaxDist = aveMaxDist/nel;
+  
+  float aveLinesUsed = 0.0;
+  
+  labels[9].setText("aveMaxDist= "+str(aveMaxDist)+"\n("+str(aveMaxDist/nodesPerLine)+" lines)");
+  String binstring = "";
+  for(int ni=0; ni<np; ni++){
+    if(lineBins[ni] > 0){
+      binstring += "["+str(ni+1)+"] - "+str(lineBins[ni])+"\n";
+      aveLinesUsed += lineBins[ni]*(ni+1);
+    }
+  }
+  aveLinesUsed /= nel;
+  binstring = "Lines used per element\n[lines] - #el\n(ave = "+str(aveLinesUsed)+")\n" + binstring;
+  
+  labels[10].setText(binstring);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -1246,6 +1481,10 @@ class Button{
     bColor = c;
   }
   
+  void setText(String s){
+    setText(s,textColor);
+  }
+  
   void setText(String s, color tc){
     theText = s;
     textColor = tc;
@@ -1292,7 +1531,7 @@ class Label{
       textAlign(CENTER, CENTER);
       text(theText, x + wide/2, y + high/2);
     }else{
-      textAlign(LEFT, CENTER);
+      textAlign(LEFT, TOP);
       text(theText, x + 5, y + high/2);
     }
   }
