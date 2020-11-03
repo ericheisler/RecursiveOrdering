@@ -131,8 +131,9 @@ void setup(){
   
   labels[7] = new Label(rightx + 35, 350, rightWidth - 80, 30, "nodes/$line= "+str(nodesPerLine));
   labels[8] = new Label(rightx + 35, 385, rightWidth - 80, 30, "cache lines= "+str(cachelines));
-  labels[9] = new Label(rightx, 430, rightWidth, 30, "aveMaxDist= "+str(aveMaxDist)+"\n");
-  labels[10] = new Label(rightx, 470, rightWidth, 40, "");
+  labels[9] = new Label(rightx, 430, rightWidth, 50, "Lines used/element\n(ave =   )");
+  labels[10] = new Label(rightx, 480, rightWidth, 40, "Add elements to see");
+  labels[9].setSize(14);
   
   xslider = new Slider(10, 80, 40, height-90, 1, twoN, twoN, str(twoN));
   yslider = new Slider(55, 80, 40, height-90, 1, twoN, twoN, str(twoN));
@@ -597,6 +598,17 @@ void rescaleDepthIfNeeded(){
 }
 
 void buildPoints(){
+  if(depth == 0){
+    nnodes = 1;
+    nodes = new Point3[nnodes];
+    order = new int[nnodes];
+    int twoN = 1;
+    int cellsize = cubesize;
+    nodes[0] = new Point3(0,0,0);
+    order[0] = 0;
+    invorder = order;
+    return;
+  }
   if(threeD){
     nnodes = dimx*dimy*dimz;
     nodes = new Point3[nnodes];
@@ -811,7 +823,7 @@ void computeCacheStats(){
   
   float aveLinesUsed = 0.0;
   
-  labels[9].setText("aveMaxDist= "+str(aveMaxDist)+"\n("+str(aveMaxDist/nodesPerLine)+" lines)");
+  
   String binstring = "";
   for(int ni=0; ni<np; ni++){
     if(lineBins[ni] > 0){
@@ -820,8 +832,7 @@ void computeCacheStats(){
     }
   }
   aveLinesUsed /= nel;
-  binstring = "Lines used per element\n[lines] - #el\n(ave = "+str(aveLinesUsed)+")\n" + binstring;
-  
+  labels[9].setText("Lines used/element\n(ave = "+str(aveLinesUsed)+")");
   labels[10].setText(binstring);
 }
 
@@ -1503,6 +1514,7 @@ class Button{
 class Label{
   int x, y, wide, high;
   color bColor, textColor;
+  int theSize;
   String theText;
   boolean centerTextX, withBox;
   
@@ -1515,6 +1527,7 @@ class Label{
     textColor = color(0);
     
     theText = txt;
+    theSize = 12;
     centerTextX = false;
     withBox = false;
   }
@@ -1527,6 +1540,7 @@ class Label{
     }
     
     fill(textColor);
+    textSize(theSize);
     if(centerTextX){
       textAlign(CENTER, CENTER);
       text(theText, x + wide/2, y + high/2);
@@ -1542,6 +1556,10 @@ class Label{
   
   void setText(String s){
     theText = s;
+  }
+  
+  void setSize(int sz){
+    theSize = sz;
   }
   
   void centerText(boolean doit){
