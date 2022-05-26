@@ -133,9 +133,9 @@ void setup(){
   
   labels[7] = new Label(rightx + 35, 350, rightWidth - 80, 30, "nodes/$line= "+str(nodesPerLine));
   labels[8] = new Label(rightx + 35, 385, rightWidth - 80, 30, "cache lines= "+str(cachelines));
-  labels[9] = new Label(rightx, 430, rightWidth, 50, "Lines used/element\n(ave =   )");
+  labels[9] = new Label(rightx, 420, rightWidth, 50, "Lines used/element\n(ave =   )");
   labels[10] = new Label(rightx, 480, rightWidth, 40, "Add elements to see");
-  labels[9].setSize(14);
+  labels[9].setSize(18);
   
   xslider = new Slider(10, 80, 40, height-90, 1, twoN, twoN, str(twoN));
   yslider = new Slider(55, 80, 40, height-90, 1, twoN, twoN, str(twoN));
